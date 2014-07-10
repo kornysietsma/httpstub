@@ -40,7 +40,16 @@ For more see stub_server_examples in the tests
 
 ## License
 
-Copyright © 2014 Kornelis Sietsma
+        DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+                    Version 2, December 2004
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+ Copyright (C) 2014 Kornelis Sietsma <korny@sietsma.com>
+
+ Everyone is permitted to copy and distribute verbatim or modified
+ copies of this license document, and changing it is allowed as long
+ as the name is changed.
+
+            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. You just DO WHAT THE FUCK YOU WANT TO.
