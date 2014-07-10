@@ -5,7 +5,7 @@ A Clojure library designed to assist testing programs that need to talk to HTTP 
 Basically this is some simple macros to spin up a local Jetty server with dynamic routes, that records all activity, so you can
 write expressive tests easily.
 
-This only works on localhost requests - if you need to stub out a real remote server, have a look at (clj-http-fake)[https://github.com/myfreeweb/clj-http-fake] which is far more powerful.  And complex!
+This only works on localhost requests - if you need to stub out a real remote server, have a look at [clj-http-fake](https://github.com/myfreeweb/clj-http-fake) which is far more powerful.  And more complex.
 
 This is very basic at the moment.  For instance, you can only run a single server!  Treat it as an alpha.
 
