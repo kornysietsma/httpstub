@@ -37,6 +37,7 @@ For more see stub_server_examples in the tests
 * unit tests!
 * Add a not-handled check with a better error message
 * Allow for multiple simultaneous jetty servers - need a local binding or something, rather than a single atom
+* Add some way to add events from routes - setting headers is ugly, but there needs to be a way to find the _current_ conversation id. Maybe it could be in the request?
 
 ## License
 
