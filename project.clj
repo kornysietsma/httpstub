@@ -10,7 +10,8 @@
                            [clj-time "0.7.0"]
                            [ring "1.3.0"]]
 
-            :profiles {:dev {:dependencies [[midje "1.6.3"]]}}
+            :profiles {:dev {:dependencies [[midje "1.6.3"]
+                                            [ring-mock "0.1.5"]]}}
 
             :plugins [[lein-ring "0.8.2"]
                       [lein-midje "3.1.1"]

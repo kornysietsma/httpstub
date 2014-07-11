@@ -20,80 +20,101 @@
     {:status 500
      :body   "Fail handler called!"}))
 
-(defonce server-state (atom {:server  nil
-                             :history {} ; map from conversation id to history
-                             :handler fail-handler
-                             }))
+; state is keyed by port - no ports initially
+(defonce server-state (atom {}))
 
 (defn- conj-vec [v data]
   (if (nil? v)
     [data]
     (conj v data)))
 
-(defn- add-history! [conv-id kind data]
-  (swap! server-state #(update-in % [:history conv-id] conj-vec
-                                  {:conversation conv-id
-                                   :timestamp (.getTime (Date.))
-                                   :kind      kind
-                                   :data      data})))
+{:server  nil
+ :history {} ; map from conversation id to history
+ :handler fail-handler
+ }
+
+(defn- add-history-to-state [state port conv-id kind data]
+  (when-not (get state port)
+    (throw (Exception. (str "Can't add history - no server at port " port))))
+  (update-in state [port :history conv-id] conj-vec
+             {:conversation conv-id
+              :timestamp (.getTime (Date.))
+              :kind      kind
+              :data      data}))
+
+(defn- add-history! [port conv-id kind data]
+  (swap! server-state add-history-to-state port conv-id kind data))
 
 (defonce atomic-id (AtomicInteger. 0))
 (defn- next-id [] (.incrementAndGet atomic-id))
 
-(defn- handler-middleware [handler]
+(defn- handler-middleware [port handler]
   (fn [request]
     (let [conv-id (next-id)]
-      (add-history! conv-id :request (with-slurped-body request))
+      (add-history! port conv-id :request (with-slurped-body request))
       (try
         (let [response (handler request)]
-          (add-history! conv-id :response response)
+          (add-history! port conv-id :response response)
           response)
         (catch Exception e
-               (add-history! conv-id :exception e))))))
+               (add-history! port conv-id :exception e))))))
 
-(defn- handlerfn [request]
-  ((:handler @server-state) request))
+(defn- handlerfn
+  ([port request]
+  ((get-in @server-state [port :handler]) request))
+  ([port request & extras]
+   (prn "wtf?" port request extras)
+   (handlerfn port request)))
 
-(def stub-handler
-  (-> handlerfn
-      handler-middleware))
+(defn stub-handler [port]
+  (->> (partial handlerfn port)
+       (handler-middleware port)))
 
 (defn start-server [port]
-  (when (:server @server-state)
-    (throw (Exception. "Server started twice!")))
-  (let [server (jetty/run-jetty stub-handler {:port port :join? false})]
-    (swap! server-state #(assoc % :server server))))
+  (when (get-in @server-state [port :server])
+    (throw (Exception. (str "Server started twice on port " port))))
+  (let [server (jetty/run-jetty (stub-handler port) {:port port :join? false})]
+    (swap! server-state
+           #(assoc % port {:server server
+                           :history {}
+                           :handler fail-handler}))))
 
-(defn stop-server []
-  (when (:server @server-state)
+(defn stop-server [port]
+  (if-let [server (get-in @server-state [port :server])]
     (do
-      (.stop (:server @server-state))
-      (swap! server-state #(assoc % :server nil)))))
+      (.stop server)
+      (swap! server-state #(assoc-in % [port :server] nil)))))
 
-(defn set-handler! [handler]
-  (swap! server-state #(assoc % :handler handler)))
+(defn set-handler! [port handler]
+  (when-not (get-in @server-state [port :server])
+    (throw (Exception. (str "No server at port " port))))
+  (swap! server-state #(assoc-in % [port :handler] handler)))
 
-(defn reset-handler! []
-  (set-handler! fail-handler))
+(defn reset-handler! [port]
+  (set-handler! port fail-handler))
 
-(defn reset-history! []
-  (swap! server-state #(assoc % :history {})))
+(defn reset-history! [port]
+  (when-not (get-in @server-state [port :server])
+    (throw (Exception. (str "No server at port " port))))
+  (swap! server-state #(assoc-in % [port :history] {})))
 
 (defn reset-all []
-  (stop-server)
-  (reset-handler!)
-  (reset-history!))
+  (for [port (keys @server-state)]
+    (do
+      (stop-server port)
+      (reset-handler! port)
+      (reset-history! port))))
 
-(defn history []
-  (->> (:history @server-state)
+(defn history [port]
+  (->> (get-in @server-state [port :history])
        (sort-by (fn [[id _]] id))
        (map second)))
 
-(defn latest-conversation []
-  (last (history)))
+(defn latest-conversation [port]
+  (last (history port)))
 
-(defn latest-history-of-kind [kind]
-  (let [h (latest-conversation)
+(defn latest-history-of-kind [port kind]
+  (let [h (latest-conversation port)
         matches (filter #(= (:kind %) kind) h)
         matchcount (count matches)]
     (if (= 1 matchcount)
@@ -101,9 +122,9 @@
       (throw (Exception. (str "Expected 1 match of kind " kind " - saw " matchcount))))))
 
 (defn latest-history-header
-  ([header] (latest-history-header :response header))
-  ([kind header]
-   (-> (latest-history-of-kind kind)
+  ([port header] (latest-history-header port :response header))
+  ([port kind header]
+   (-> (latest-history-of-kind port kind)
        :data
        :headers
        (get header))))
@@ -114,15 +135,15 @@
      (println "Jetty server running on port " ~port)
      ~@body
      (finally
-       (stop-server)
+       (stop-server ~port)
        (println "Jetty server stopped"))))
 
-(defmacro with-handler [handler & body]
+(defmacro with-handler [port handler & body]
   `(try
      (do
-       (reset-history!)
-       (set-handler! ~handler)
+       (reset-history! ~port)
+       (set-handler! ~port ~handler)
        ~@body)
      (finally
-       (reset-handler!))))
+       (reset-handler! ~port))))
 
