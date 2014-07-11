@@ -34,8 +34,9 @@ For more see stub_server_examples in the tests
 
 ## TODO
 
+* Simpler handling for single-server mode - maybe if you only have one server, default all functions to use that single server's port?
 * Add a not-handled check with a better error message
-* Add some way to add events from routes - setting headers is ugly, but there needs to be a way to find the _current_ conversation id. Maybe it could be in the request?
+* Add some way to add events from routes - setting headers is ugly, but there needs to be a way to find the _current_ conversation id. Maybe it could be in the request map?
 
 ## License
 
