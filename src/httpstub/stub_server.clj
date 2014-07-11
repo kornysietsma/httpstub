@@ -21,13 +21,18 @@
      :body   "Fail handler called!"}))
 
 (defonce server-state (atom {:server  nil
-                             :history []
+                             :history {} ; map from conversation id to history
                              :handler fail-handler
                              }))
 
-(defn- add-history! [id kind data]
-  (swap! server-state #(update-in % [:history] conj
-                                  {:id        id
+(defn- conj-vec [v data]
+  (if (nil? v)
+    [data]
+    (conj v data)))
+
+(defn- add-history! [conv-id kind data]
+  (swap! server-state #(update-in % [:history conv-id] conj-vec
+                                  {:conversation conv-id
                                    :timestamp (.getTime (Date.))
                                    :kind      kind
                                    :data      data})))
@@ -37,14 +42,14 @@
 
 (defn- handler-middleware [handler]
   (fn [request]
-    (let [id (next-id)]
-      (add-history! id :request (with-slurped-body request))
+    (let [conv-id (next-id)]
+      (add-history! conv-id :request (with-slurped-body request))
       (try
         (let [response (handler request)]
-          (add-history! id :response response)
+          (add-history! conv-id :response response)
           response)
         (catch Exception e
-               (add-history! id :exception e))))))
+               (add-history! conv-id :exception e))))))
 
 (defn- handlerfn [request]
   ((:handler @server-state) request))
@@ -72,28 +77,23 @@
   (set-handler! fail-handler))
 
 (defn reset-history! []
-  (swap! server-state #(assoc % :history [])))
+  (swap! server-state #(assoc % :history {})))
 
 (defn reset-all []
   (stop-server)
   (reset-handler!)
   (reset-history!))
 
-(defn- conversation-kv-list-to-map [history]
-  (for [[id data] history]
-    {:id id :conversation (sort-by :timestamp data)}))
-
 (defn history []
   (->> (:history @server-state)
-       (group-by :id)
        (sort-by (fn [[id _]] id))
-       (conversation-kv-list-to-map)))
+       (map second)))
 
-(defn latest-history []
-  (:conversation (last (history))))
+(defn latest-conversation []
+  (last (history)))
 
 (defn latest-history-of-kind [kind]
-  (let [h (latest-history)
+  (let [h (latest-conversation)
         matches (filter #(= (:kind %) kind) h)
         matchcount (count matches)]
     (if (= 1 matchcount)

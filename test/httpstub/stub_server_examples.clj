@@ -17,8 +17,8 @@
         (let [foo-resp (fix-http (http/get "http://localhost:3001/foo"))]
           foo-resp => (contains {:status 200 :body "hello"})
           (count (stub/history)) => 1
-          (count (stub/latest-history)) => 2
-          (map :kind (stub/latest-history)) => [:request :response]
+          (count (stub/latest-conversation)) => 2
+          (map :kind (stub/latest-conversation)) => [:request :response]
           )))
     (fact "you can add headers to check behaviour"
       (stub/with-handler
