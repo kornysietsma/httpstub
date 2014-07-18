@@ -52,3 +52,22 @@
               (count (stub/history 3001)) => 2
               (count (stub/history 3002)) => 1
               )))))))
+
+(facts "about multiple handlers"
+  (stub/with-server 3001
+    (stub/with-handler 3001
+      (GET "/foo" [req]
+           {:status 200 :body "foo!"})
+      (fact "outside nesting, unknown routes fail"
+        (fix-http (http/get "http://localhost:3001/foo")) => (contains {:status 200 :body "foo!"})
+        (fix-http (http/get "http://localhost:3001/bar")) => (throws Exception "clj-http: status 500"))
+      (stub/with-handler 3001
+        (GET "/bar" [req]
+             {:status 200 :body "bar!"})
+        (fact "inside nesting, new routes succeed"
+          (fix-http (http/get "http://localhost:3001/foo")) => (contains {:status 200 :body "foo!"})
+          (fix-http (http/get "http://localhost:3001/bar")) => (contains {:status 200 :body "bar!"})))
+      (fact "after nesting, unknown routes fail"
+        (fix-http (http/get "http://localhost:3001/foo")) => (contains {:status 200 :body "foo!"})
+        (fix-http (http/get "http://localhost:3001/bar")) => (throws Exception "clj-http: status 500"))
+      )))

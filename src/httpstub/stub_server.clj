@@ -9,16 +9,14 @@
     (assoc request :body (slurp (:body request)))
     request))
 
-(def echo-handler
-  (fn [request]
+(defn echo-handler [request]
     {:status  200
      :headers {"Content-Type" "application/json"}
-     :body    (cheshire/generate-string (with-slurped-body request))}))
+     :body    (cheshire/generate-string (with-slurped-body request))})
 
-(def fail-handler
-  (fn [_]
+(defn fail-handler [req]
     {:status 500
-     :body   "Fail handler called!"}))
+     :body   "Fail handler called!"})
 
 ; state is keyed by port - no ports initially
 (defonce server-state (atom {}))
@@ -28,10 +26,16 @@
     [data]
     (conj v data)))
 
-{:server  nil
- :history {} ; map from conversation id to history
- :handler fail-handler
- }
+(comment "server state is a map by port to:"
+{:server  "jetty server object"
+ :history {
+            "conv-id" { :conversation "conv-id"
+                        :timestamp "ts"
+                        :kind #{:request :response :exception}
+                        :data "some sort of history data"}
+            }
+ :handlers (handlers ... fh) ; note - push a handler per with-handlers block, use compojure.core/routing to run them
+ })
 
 (defn- add-history-to-state [state port conv-id kind data]
   (when-not (get state port)
@@ -60,11 +64,9 @@
                (add-history! port conv-id :exception e))))))
 
 (defn- handlerfn
-  ([port request]
-  ((get-in @server-state [port :handler]) request))
-  ([port request & extras]
-   (prn "wtf?" port request extras)
-   (handlerfn port request)))
+  [port request]
+  (let [handlers (get-in @server-state [port :handlers])]
+    (some #(% request) handlers)))
 
 (defn stub-handler [port]
   (->> (partial handlerfn port)
@@ -77,7 +79,7 @@
     (swap! server-state
            #(assoc % port {:server server
                            :history {}
-                           :handler fail-handler}))))
+                           :handlers (list fail-handler)}))))
 
 (defn stop-server [port]
   (if-let [server (get-in @server-state [port :server])]
@@ -85,13 +87,23 @@
       (.stop server)
       (swap! server-state #(assoc-in % [port :server] nil)))))
 
-(defn set-handler! [port handler]
+(defn set-handlers! [port handlers]
   (when-not (get-in @server-state [port :server])
     (throw (Exception. (str "No server at port " port))))
-  (swap! server-state #(assoc-in % [port :handler] handler)))
+  (swap! server-state #(assoc-in % [port :handlers] handlers)))
 
-(defn reset-handler! [port]
-  (set-handler! port fail-handler))
+(defn reset-handlers! [port]
+  (set-handlers! port (list fail-handler)))
+
+(defn push-handler! [port handler]
+  (when-not (get-in @server-state [port :server])
+    (throw (Exception. (str "No server at port " port))))
+  (swap! server-state #(update-in % [port :handlers] (fn [h] (conj h handler)))))
+
+(defn pop-handler! [port]
+  (when-not (get-in @server-state [port :server])
+    (throw (Exception. (str "No server at port " port))))
+  (swap! server-state #(update-in % [port :handlers] rest)))
 
 (defn reset-history! [port]
   (when-not (get-in @server-state [port :server])
@@ -102,7 +114,7 @@
   (for [port (keys @server-state)]
     (do
       (stop-server port)
-      (reset-handler! port)
+      (reset-handlers! port)
       (reset-history! port))))
 
 (defn history [port]
@@ -141,9 +153,8 @@
 (defmacro with-handler [port handler & body]
   `(try
      (do
-       (reset-history! ~port)
-       (set-handler! ~port ~handler)
+       (push-handler! ~port ~handler)
        ~@body)
      (finally
-       (reset-handler! ~port))))
+       (pop-handler! ~port))))
 
